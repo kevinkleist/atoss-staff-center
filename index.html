@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATOSS Staff Center Widget</title>
+    <style>
+        /* Scoped styles to prevent bleeding into the host app */
+        .atoss-widget {
+            --primary: #0061d5;
+            --primary-hover: #004fb0;
+            --success: #28a745;
+            --danger: #dc3545;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #6c757d;
+            --border-color: #e5e5e5;
+            --donut-taken: #17a2b8;
+            --donut-planned: #007bff;
+            --donut-toplan: #e9ecef;
+            
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 16px;
+            box-sizing: border-box;
+            max-width: 600px;
+            margin: 0 auto;
+            border-radius: 12px;
+            line-height: 1.5;
+            position: relative;
+            overflow: hidden;
+            min-height: 500px;
+        }
+
+        .atoss-widget * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Views management */
+        .atoss-view {
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            display: none;
+            opacity: 0;
+        }
+        .atoss-view.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Header */
+        .atoss-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 12px;
+        }
+        
+        .atoss-header svg {
+            width: 28px;
+            height: 28px;
+            fill: var(--primary);
+        }
+
+        .atoss-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        /* Cards Layout */
+        .atoss-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid var(--border-color);
+        }
+
+        .atoss-card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+        }
+
+        /* Clock In/Out Button */
+        .atoss-clock-btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+            background-color: var(--success);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        .atoss-clock-btn.active {
+            background-color: var(--danger);
+        }
+        .atoss-clock-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+        }
+        
+        /* Timer formatting */
+        #atossTimer {
+            display: none;
+            font-variant-numeric: tabular-nums;
+            font-weight: 400;
+            opacity: 0.9;
+        }
+
+        /* Vacation Donut Layout */
+        .atoss-vacation-row {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .atoss-donut {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: conic-gradient(
+                var(--donut-taken) 0% 14%, 
+                var(--donut-planned) 14% 84%, 
+                var(--donut-toplan) 84% 100%
+            );
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .atoss-donut-inner {
+            width: 70px;
+            height: 70px;
+            background-color: var(--card-bg);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .atoss-donut-val {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .atoss-donut-lbl {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .atoss-vacation-legend {
+            flex-grow: 1;
+            font-size: 0.85rem;
+        }
+
+        .atoss-legend-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .atoss-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 6px;
+        }
+        .atoss-dot.taken { background-color: var(--donut-taken); }
+        .atoss-dot.planned { background-color: var(--donut-planned); }
+        .atoss-dot.toplan { background-color: var(--donut-toplan); }
+
+        /* Balances */
+        .atoss-balance-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .atoss-balance-item {
+            background-color: var(--bg-color);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .atoss-balance-lbl {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .atoss-balance-val {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Quick Actions Menu */
+        .atoss-menu {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        .atoss-menu-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-main);
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: background-color 0.2s, transform 0.1s;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+        .atoss-menu-item:hover {
+            background-color: #e9ecef;
+        }
+        .atoss-menu-item:active {
+            transform: scale(0.98);
+        }
+        .atoss-menu-item svg {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            fill: var(--primary);
+            flex-shrink: 0;
+        }
+
+        /* Notifications */
+        .atoss-notification {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px;
+            margin-bottom: 8px;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .atoss-notification:hover {
+            background-color: #e9ecef;
+        }
+        .atoss-notification:last-child {
+            margin-bottom: 0;
+        }
+        .atoss-noti-icon {
+            margin-right: 12px;
+            color: var(--success);
+            flex-shrink: 0;
+        }
+        .atoss-noti-icon.pending { color: #f0ad4e; }
+        .atoss-noti-icon svg { width: 18px; height: 18px; fill: currentColor; }
+        
+        .atoss-noti-content { flex-grow: 1; }
+        .atoss-noti-content strong { display: block; margin-bottom: 2px; color: var(--text-main); }
+        .atoss-noti-date { color: var(--text-muted); font-size: 0.75rem; }
+
+        /* Subpage Styling */
+        .atoss-subpage-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .atoss-back-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            color: var(--primary);
+        }
+        .atoss-back-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+        .atoss-subpage-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .atoss-detail-list {
+            list-style: none;
+        }
+        .atoss-detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.95rem;
+        }
+        .atoss-detail-item:last-child {
+            border-bottom: none;
+        }
+        .atoss-detail-label {
+            color: var(--text-muted);
+        }
+        .atoss-detail-value {
+            font-weight: 500;
+        }
+        .atoss-status-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .atoss-status-badge.approved { background-color: #d4edda; color: #155724; }
+        .atoss-status-badge.pending { background-color: #fff3cd; color: #856404; }
+
+        @media (min-width: 480px) {
+            .atoss-menu {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="atoss-widget">
+    
+    <div id="view-dashboard" class="atoss-view active">
+        <div class="atoss-header">
+            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+            <h2 data-i18n="title">ATOSS Staff Center</h2>
+        </div>
+
+        <div class="atoss-card">
+            <button id="atossClockBtn" class="atoss-clock-btn">
+                <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                <div>
+                    <span id="atossClockText" data-i18n="clockIn">Kommen</span>
+                    <span id="atossTimer"></span>
+                </div>
+            </button>
+        </div>
+
+        <div class="atoss-card">
+            <div class="atoss-card-title">
+                <svg style="width:18px; fill:var(--primary);" viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+                <span data-i18n="vacationBalances">Urlaub & Salden</span>
+            </div>
+            
+            <div class="atoss-vacation-row">
+                <div class="atoss-donut">
+                    <div class="atoss-donut-inner">
+                        <div class="atoss-donut-val">5.5</div>
+                        <div class="atoss-donut-lbl" data-i18n="toPlan">Zu planen</div>
+                    </div>
+                </div>
+                <div class="atoss-vacation-legend">
+                    <div class="atoss-legend-item">
+                        <span><span class="atoss-dot taken"></span><span data-i18n="taken">Genommen</span></span>
+                        <span>5</span>
+                    </div>
+                    <div class="atoss-legend-item">
+                        <span><span class="atoss-dot planned"></span><span data-i18n="planned">Geplant</span></span>
+                        <span>19.5</span>
+                    </div>
+                    <div class="atoss-legend-item">
+                        <span><span class="atoss-dot toplan"></span><span data-i18n="toPlan">Zu planen</span></span>
+                        <span>5.5</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin: 16px 0; border-top: 1px solid var(--border-color);"></div>
+
+            <div class="atoss-balance-grid">
+                <div class="atoss-balance-item">
+                    <div class="atoss-balance-lbl" data-i18n="flextime">Gleitzeit</div>
+                    <div class="atoss-balance-val">+20:24h</div>
+                </div>
+                <div class="atoss-balance-item">
+                    <div class="atoss-balance-lbl" data-i18n="overtime">Überstunden</div>
+                    <div class="atoss-balance-val">+9:56h</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="atoss-card">
+            <div class="atoss-card-title">
+                <svg style="width:18px; fill:var(--primary);" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                <span data-i18n="services">Self Services</span>
+            </div>
+            <div class="atoss-menu">
+                <button class="atoss-menu-item" onclick="openSubpage('workingTime')">
+                    <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    <span data-i18n="workingTime">Arbeitszeit</span>
+                </button>
+                <button class="atoss-menu-item" onclick="openSubpage('absences')">
+                    <svg viewBox="0 0 24 24"><path d="M22 3H2v18h20V3zm-2 16H4V7h16v12z"/></svg>
+                    <span data-i18n="absences">Abwesenheiten</span>
+                </button>
+                <button class="atoss-menu-item" onclick="openSubpage('shiftPlan')">
+                    <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+                    <span data-i18n="shiftPlan">Dienstplan</span>
+                </button>
+                <button class="atoss-menu-item" onclick="openSubpage('projectTimes')">
+                    <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                    <span data-i18n="projectTimes">Projektzeiten</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="atoss-card" style="margin-bottom: 0;">
+            <div class="atoss-card-title">
+                <svg style="width:18px; fill:var(--primary);" viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+                <span data-i18n="notifications">Mitteilungen</span>
+            </div>
+            
+            <div class="atoss-notification" onclick="openSubpage('notiApproved')">
+                <div class="atoss-noti-icon">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                </div>
+                <div class="atoss-noti-content">
+                    <strong data-i18n="vacationApproved">Urlaub genehmigt</strong>
+                    <span class="atoss-noti-date">20.05.2026 - 22.05.2026</span>
+                </div>
+            </div>
+            <div class="atoss-notification" onclick="openSubpage('notiPending')">
+                <div class="atoss-noti-icon pending">
+                    <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm1-13h-2v5l4.28 2.54.92-1.51-3.2-1.9V7z"/></svg>
+                </div>
+                <div class="atoss-noti-content">
+                    <strong data-i18n="vacationReq">Urlaubsantrag</strong>
+                    <span class="atoss-noti-date">17.06.2026 - 30.06.2026 (Ausstehend)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-subpage" class="atoss-view">
+        <div class="atoss-subpage-header">
+            <button class="atoss-back-btn" onclick="closeSubpage()">
+                <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            </button>
+            <div class="atoss-subpage-title" id="subpage-title">Service Details</div>
+        </div>
+        
+        <div class="atoss-card">
+            <ul class="atoss-detail-list" id="subpage-content">
+                </ul>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    (function() {
+        // I18N Translations Dictionary
+        const translations = {
+            en: {
+                title: "ATOSS Staff Center",
+                clockIn: "Clock In",
+                clockOut: "Clock Out",
+                vacationBalances: "Vacation & Balances",
+                toPlan: "To plan",
+                taken: "Taken",
+                planned: "Planned",
+                flextime: "Flextime",
+                overtime: "Overtime",
+                services: "Self Services",
+                workingTime: "Working Time",
+                absences: "Absences",
+                shiftPlan: "Shift Plan",
+                projectTimes: "Project Times",
+                notifications: "Notifications",
+                vacationApproved: "Vacation approved",
+                vacationReq: "Vacation request",
+                back: "Back",
+                status: "Status",
+                date: "Date",
+                type: "Type",
+                details: "Details",
+                approved: "Approved",
+                pending: "Pending",
+                recordedHours: "Recorded Hours (This Month)",
+                targetHours: "Target Hours",
+                balance: "Current Balance",
+                nextShift: "Next Shift",
+                department: "Department"
+            },
+            de: {
+                title: "ATOSS Staff Center",
+                clockIn: "Kommen",
+                clockOut: "Gehen",
+                vacationBalances: "Urlaub & Salden",
+                toPlan: "Zu planen",
+                taken: "Genommen",
+                planned: "Geplant",
+                flextime: "Gleitzeit",
+                overtime: "Überstunden",
+                services: "Self Services",
+                workingTime: "Arbeitszeit",
+                absences: "Abwesenheiten",
+                shiftPlan: "Dienstplan",
+                projectTimes: "Projektzeiten",
+                notifications: "Mitteilungen",
+                vacationApproved: "Urlaub genehmigt",
+                vacationReq: "Urlaubsantrag",
+                back: "Zurück",
+                status: "Status",
+                date: "Datum",
+                type: "Art",
+                details: "Details",
+                approved: "Genehmigt",
+                pending: "Ausstehend",
+                recordedHours: "Erfasste Stunden (Monat)",
+                targetHours: "Soll-Stunden",
+                balance: "Aktuelles Saldo",
+                nextShift: "Nächste Schicht",
+                department: "Abteilung"
+            }
+        };
+
+        // Determine language settings
+        const userLang = navigator.language || navigator.userLanguage;
+        const langCode = userLang.startsWith('de') ? 'de' : 'en';
+        const t = translations[langCode];
+
+        // Apply translations to the DOM setup
+        document.querySelectorAll('[data-i18n]').forEach(element => {
+            const key = element.getAttribute('data-i18n');
+            if (t[key]) element.innerText = t[key];
+        });
+
+        // Interactive Behavior: Clock In / Clock Out Timer logic
+        const clockBtn = document.getElementById('atossClockBtn');
+        const clockText = document.getElementById('atossClockText');
+        const timerText = document.getElementById('atossTimer');
+        
+        let isClockedIn = false;
+        let timerInterval;
+        let startTime;
+
+        function updateTimer() {
+            const now = Date.now();
+            const diff = Math.floor((now - startTime) / 1000);
+            
+            const hours = String(Math.floor(diff / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            const seconds = String(diff % 60).padStart(2, '0');
+            
+            timerText.innerText = `- ${hours}:${minutes}:${seconds}`;
+        }
+
+        clockBtn.addEventListener('click', function() {
+            isClockedIn = !isClockedIn;
+            
+            if (isClockedIn) {
+                // User clocked in
+                clockBtn.classList.add('active');
+                clockText.innerText = t.clockOut;
+                
+                // Start timer
+                startTime = Date.now();
+                timerText.style.display = 'inline';
+                updateTimer(); // Initialize immediately
+                timerInterval = setInterval(updateTimer, 1000);
+            } else {
+                // User clocked out
+                clockBtn.classList.remove('active');
+                clockText.innerText = t.clockIn;
+                
+                // Stop & hide timer
+                clearInterval(timerInterval);
+                timerText.style.display = 'none';
+                timerText.innerText = '';
+            }
+        });
+
+        // Subpage Content Factory Data (Simulated Database)
+        const subpageData = {
+            workingTime: {
+                titleKey: 'workingTime',
+                items: () => [
+                    { label: t.recordedHours, value: '142:15 h' },
+                    { label: t.targetHours, value: '160:00 h' },
+                    { label: t.balance, value: '+20:24 h' },
+                    { label: 'Letzter Stempel', value: 'Gestern, 16:45' }
+                ]
+            },
+            absences: {
+                titleKey: 'absences',
+                items: () => [
+                    { label: t.planned, value: '19.5 ' + (langCode === 'de' ? 'Tage' : 'Days') },
+                    { label: t.taken, value: '5.0 ' + (langCode === 'de' ? 'Tage' : 'Days') },
+                    { label: 'Krankheitstage YTD', value: '2 ' + (langCode === 'de' ? 'Tage' : 'Days') }
+                ]
+            },
+            shiftPlan: {
+                titleKey: 'shiftPlan',
+                items: () => [
+                    { label: t.nextShift, value: 'Fr, 22.05. (08:00 - 16:30)' },
+                    { label: t.department, value: 'Logistik / HW-2' },
+                    { label: 'Schicht-Typ', value: 'Frühschicht F1' }
+                ]
+            },
+            projectTimes: {
+                titleKey: 'projectTimes',
+                items: () => [
+                    { label: 'Projekt A (Staffbase App)', value: '12:30 h' },
+                    { label: 'Projekt B (ATOSS Integration)', value: '24:15 h' },
+                    { label: 'Interne Administration', value: '4:00 h' }
+                ]
+            },
+            notiApproved: {
+                titleKey: 'notifications',
+                items: () => [
+                    { label: t.type, value: t.vacationApproved },
+                    { label: t.date, value: '20.05.2026 - 22.05.2026' },
+                    { label: 'Dauer', value: '3 ' + (langCode === 'de' ? 'Tage' : 'Days') },
+                    { label: t.status, value: `<span class="atoss-status-badge approved">${t.approved}</span>` }
+                ]
+            },
+            notiPending: {
+                titleKey: 'notifications',
+                items: () => [
+                    { label: t.type, value: t.vacationReq },
+                    { label: t.date, value: '17.06.2026 - 30.06.2026' },
+                    { label: 'Vertretung', value: 'M. Mustermann' },
+                    { label: t.status, value: `<span class="atoss-status-badge pending">${t.pending}</span>` }
+                ]
+            }
+        };
+
+        // Navigation Controllers
+        window.openSubpage = function(id) {
+            const data = subpageData[id];
+            if (!data) return;
+
+            document.getElementById('subpage-title').innerText = t[data.titleKey];
+            
+            const contentContainer = document.getElementById('subpage-content');
+            contentContainer.innerHTML = '';
+
+            data.items().forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'atoss-detail-item';
+                li.innerHTML = `
+                    <span class="atoss-detail-label">${item.label}</span>
+                    <span class="atoss-detail-value">${item.value}</span>
+                `;
+                contentContainer.appendChild(li);
+            });
+
+            switchViews('view-dashboard', 'view-subpage');
+        };
+
+        window.closeSubpage = function() {
+            switchViews('view-subpage', 'view-dashboard');
+        };
+
+        function switchViews(fromId, toId) {
+            const fromView = document.getElementById(fromId);
+            const toView = document.getElementById(toId);
+            
+            fromView.classList.remove('active');
+            setTimeout(() => {
+                toView.classList.add('active');
+            }, 50); 
+        }
+    })();
+</script>
+
+</body>
+</html>
